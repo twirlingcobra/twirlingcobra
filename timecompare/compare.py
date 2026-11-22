@@ -15,6 +15,7 @@ class Shift:
     employee_id: str
     start: datetime
     end: datetime
+    mower: str | None = None
 
 
 @dataclass

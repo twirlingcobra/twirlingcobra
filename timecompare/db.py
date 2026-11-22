@@ -6,6 +6,9 @@ Tables
   punches      clock-in / clock-out records (green)
   comparisons  saved results per week: deltas, flags, hours, status
   settings     key/value (threshold, week start day)
+  mowers       equipment with oil-change interval
+  checkins     shift-start check-ins from the phone form (mower + hour meter)
+  oil_changes  oil changes logged at an hour-meter reading
 """
 
 from __future__ import annotations
@@ -68,6 +71,32 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+CREATE TABLE IF NOT EXISTS mowers (
+    id             INTEGER PRIMARY KEY,
+    name           TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    oil_interval_h REAL NOT NULL DEFAULT 50,
+    active         INTEGER NOT NULL DEFAULT 1,
+    notes          TEXT
+);
+CREATE TABLE IF NOT EXISTS checkins (
+    id            INTEGER PRIMARY KEY,
+    checked_in_at TEXT NOT NULL,
+    employee_id   TEXT REFERENCES employees(id),
+    employee_name TEXT NOT NULL,
+    mower_id      INTEGER NOT NULL REFERENCES mowers(id),
+    meter_hours   REAL NOT NULL,
+    source_file   TEXT,
+    imported_at   TEXT,
+    UNIQUE (checked_in_at, employee_name, mower_id)
+);
+CREATE INDEX IF NOT EXISTS ix_checkins_mower ON checkins(mower_id, checked_in_at);
+CREATE TABLE IF NOT EXISTS oil_changes (
+    id          INTEGER PRIMARY KEY,
+    mower_id    INTEGER NOT NULL REFERENCES mowers(id),
+    changed_on  TEXT NOT NULL,
+    meter_hours REAL NOT NULL,
+    notes       TEXT
+);
 """
 
 ISO = "%Y-%m-%d %H:%M:%S"
@@ -87,6 +116,10 @@ class Database:
         self.con = sqlite3.connect(self.path)
         self.con.row_factory = sqlite3.Row
         self.con.executescript(SCHEMA)
+        cols = {r["name"] for r in self.con.execute("PRAGMA table_info(shifts)")}
+        if "mower" not in cols:  # upgrade databases made by v1.0
+            self.con.execute("ALTER TABLE shifts ADD COLUMN mower TEXT")
+            self.con.commit()
 
     # ---------- settings ----------
     def get_setting(self, key: str, default: str) -> str:
@@ -116,12 +149,12 @@ class Database:
             self._upsert_employees(records)
             before = self.con.total_changes
             self.con.executemany(
-                'INSERT INTO shifts(employee_id,start,"end",source_file,imported_at) '
-                "VALUES(?,?,?,?,?) ON CONFLICT(employee_id,start) DO UPDATE SET "
-                '"end"=excluded."end", source_file=excluded.source_file, '
-                "imported_at=excluded.imported_at",
-                [(r["employee_id"], _ts(r["start"]), _ts(r["end"]), source, now)
-                 for r in records])
+                'INSERT INTO shifts(employee_id,start,"end",mower,source_file,imported_at) '
+                "VALUES(?,?,?,?,?,?) ON CONFLICT(employee_id,start) DO UPDATE SET "
+                '"end"=excluded."end", mower=excluded.mower, '
+                "source_file=excluded.source_file, imported_at=excluded.imported_at",
+                [(r["employee_id"], _ts(r["start"]), _ts(r["end"]), r.get("mower") or None,
+                  source, now) for r in records])
             return self.con.total_changes - before
 
     def import_punches(self, records, source: str) -> int:
@@ -154,9 +187,9 @@ class Database:
         lo = _ts(datetime.combine(week_start - timedelta(days=1), datetime.min.time()))
         hi = _ts(datetime.combine(week_start + timedelta(days=8), datetime.min.time()))
         emp_sql, args = ("", ()) if employee_id is None else (" AND employee_id=?", (employee_id,))
-        shifts = [Shift(r["id"], r["employee_id"], _dt(r["start"]), _dt(r["end"]))
+        shifts = [Shift(r["id"], r["employee_id"], _dt(r["start"]), _dt(r["end"]), r["mower"])
                   for r in self.con.execute(
-                      f'SELECT id,employee_id,start,"end" FROM shifts '
+                      f'SELECT id,employee_id,start,"end",mower FROM shifts '
                       f"WHERE start>=? AND start<?{emp_sql}", (lo, hi, *args))]
         punches = [Punch(r["id"], r["employee_id"], _dt(r["clock_in"]), _dt(r["clock_out"]))
                    for r in self.con.execute(

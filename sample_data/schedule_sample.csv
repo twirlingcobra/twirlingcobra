@@ -1,19 +1,19 @@
-Employee ID,Employee Name,Date,Start Time,End Time
-101,Maria Lopez,11/16/2026,8:00 AM,4:30 PM
-101,Maria Lopez,11/17/2026,8:00 AM,4:30 PM
-101,Maria Lopez,11/18/2026,8:00 AM,4:30 PM
-101,Maria Lopez,11/19/2026,8:00 AM,4:30 PM
-101,Maria Lopez,11/20/2026,8:00 AM,12:00 PM
-102,James Carter,11/16/2026,10:00 AM,6:00 PM
-102,James Carter,11/17/2026,10:00 AM,6:00 PM
-102,James Carter,11/19/2026,12:00 PM,8:00 PM
-102,James Carter,11/20/2026,12:00 PM,8:00 PM
-102,James Carter,11/21/2026,9:00 AM,3:00 PM
-103,Aisha Patel,11/16/2026,10:00 PM,6:00 AM
-103,Aisha Patel,11/17/2026,10:00 PM,6:00 AM
-103,Aisha Patel,11/18/2026,10:00 PM,6:00 AM
-103,Aisha Patel,11/19/2026,10:00 PM,6:00 AM
-104,Tom Nguyen,11/16/2026,7:00 AM,3:30 PM
-104,Tom Nguyen,11/17/2026,7:00 AM,3:30 PM
-104,Tom Nguyen,11/18/2026,7:00 AM,3:30 PM
-104,Tom Nguyen,11/20/2026,7:00 AM,3:30 PM
+Employee ID,Employee Name,Date,Start Time,End Time,Mower
+101,Maria Lopez,11/16/2026,8:00 AM,4:30 PM,Mower 1
+101,Maria Lopez,11/17/2026,8:00 AM,4:30 PM,Mower 1
+101,Maria Lopez,11/18/2026,8:00 AM,4:30 PM,Mower 1
+101,Maria Lopez,11/19/2026,8:00 AM,4:30 PM,Mower 1
+101,Maria Lopez,11/20/2026,8:00 AM,12:00 PM,Mower 1
+102,James Carter,11/16/2026,10:00 AM,6:00 PM,Mower 2
+102,James Carter,11/17/2026,10:00 AM,6:00 PM,Mower 2
+102,James Carter,11/19/2026,12:00 PM,8:00 PM,Mower 2
+102,James Carter,11/20/2026,12:00 PM,8:00 PM,Mower 2
+102,James Carter,11/21/2026,9:00 AM,3:00 PM,Mower 2
+103,Aisha Patel,11/16/2026,10:00 PM,6:00 AM,
+103,Aisha Patel,11/17/2026,10:00 PM,6:00 AM,
+103,Aisha Patel,11/18/2026,10:00 PM,6:00 AM,
+103,Aisha Patel,11/19/2026,10:00 PM,6:00 AM,
+104,Tom Nguyen,11/16/2026,7:00 AM,3:30 PM,Mower 3
+104,Tom Nguyen,11/17/2026,7:00 AM,3:30 PM,Mower 3
+104,Tom Nguyen,11/18/2026,7:00 AM,3:30 PM,Mower 3
+104,Tom Nguyen,11/20/2026,7:00 AM,3:30 PM,Mower 3

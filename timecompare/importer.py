@@ -35,6 +35,8 @@ ALIASES = {
     "end": ["end", "endtime", "scheduledend", "schedend", "shiftend", "out",
             "timeout", "clockout", "punchout", "clockouttime", "enddatetime"],
     "end_date": ["enddate", "outdate", "clockoutdate"],
+    "mower": ["mower", "mowerid", "mowernumber", "assignedmower", "equipment", "machine",
+              "unit"],
 }
 
 
@@ -184,7 +186,9 @@ def load_records(path: str | Path) -> tuple[list[dict], list[str]]:
             end = parse_datetime(g("end"), end_d) if "end" in cols else None
             if end is not None and end <= start:
                 end += timedelta(days=1)  # overnight shift
-            out.append({"employee_id": emp, "name": name or emp, "start": start, "end": end})
+            mower = str(g("mower") or "").strip() if "mower" in cols else ""
+            out.append({"employee_id": emp, "name": name or emp, "start": start, "end": end,
+                        "mower": mower})
         except ValueError as e:
             warnings.append(f"line {n}: skipped ({e})")
     return out, warnings

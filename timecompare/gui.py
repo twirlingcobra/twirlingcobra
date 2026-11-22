@@ -14,6 +14,8 @@ from . import __version__
 from .compare import Result, compare
 from .db import Database
 from .importer import ImportError_, load_records
+from .mowers import week_checkin_lookup
+from .mowers_gui import MowersTab
 
 BLUE = "#4a8fe0"
 BLUE_EDGE = "#2c6cb8"
@@ -53,7 +55,7 @@ def app_dir() -> Path:
 class App(tk.Tk):
     def __init__(self, db_path: Path):
         super().__init__()
-        self.title(f"Schedule vs. Timesheet  v{__version__}  —  {db_path.name}")
+        self.title(f"TimeCompare  v{__version__}  —  {db_path.name}")
         self.geometry("1300x820")
         self.minsize(900, 560)
         self.db = Database(db_path)
@@ -71,6 +73,8 @@ class App(tk.Tk):
         dates = self.db.weeks_with_data()
         self.week_start = self._week_of(max(dates) if dates else date.today())
         self.refresh()
+        if self.db.get_setting("checkin_sheet_url", ""):
+            self.after(500, lambda: self.mtab.sync_sheet(quiet=True))
 
     # ---------------- layout ----------------
     def _build_ui(self):
@@ -81,7 +85,17 @@ class App(tk.Tk):
             style.theme_use("clam")
         style.configure("Treeview", rowheight=22)
 
-        bar = ttk.Frame(self, padding=(8, 6))
+        foot = ttk.Frame(self, padding=(8, 3))
+        foot.pack(side="bottom", fill="x")
+        ttk.Label(foot, textvariable=self.status).pack(side="left")
+        ttk.Label(foot, textvariable=self.totals, font=("Segoe UI", 9, "bold")).pack(side="right")
+
+        self.nb = ttk.Notebook(self)
+        self.nb.pack(fill="both", expand=True, pady=(4, 0))
+        t1 = ttk.Frame(self.nb)
+        self.nb.add(t1, text="  Schedule vs. Timesheet  ")
+
+        bar = ttk.Frame(t1, padding=(8, 6))
         bar.pack(fill="x")
         ttk.Button(bar, text="Import Schedule…", command=lambda: self.do_import("schedule")).pack(side="left")
         ttk.Button(bar, text="Import Timesheet…", command=lambda: self.do_import("timesheet")).pack(side="left", padx=(4, 12))
@@ -99,7 +113,7 @@ class App(tk.Tk):
 
         ttk.Button(bar, text="Export CSV…", command=self.export_csv).pack(side="right")
         # legend + options row
-        row2 = ttk.Frame(self, padding=(8, 0))
+        row2 = ttk.Frame(t1, padding=(8, 0))
         row2.pack(fill="x")
         leg = tk.Canvas(row2, height=22, width=700, highlightthickness=0,
                         bg=style.lookup("TFrame", "background") or self["bg"])
@@ -127,7 +141,7 @@ class App(tk.Tk):
         wk.bind("<<ComboboxSelected>>", lambda e: self._settings_changed())
 
 
-        paned = ttk.PanedWindow(self, orient="vertical")
+        paned = ttk.PanedWindow(t1, orient="vertical")
         paned.pack(fill="both", expand=True, padx=8, pady=(2, 0))
 
         grid_frame = ttk.Frame(paned)
@@ -148,14 +162,14 @@ class App(tk.Tk):
         paned.add(grid_frame, weight=3)
 
         tree_frame = ttk.Frame(paned)
-        cols = ("emp", "date", "sched", "actual", "ind", "outd", "sh", "ah", "status")
+        cols = ("emp", "date", "sched", "actual", "ind", "outd", "sh", "ah", "status", "mower")
         heads = ("Employee", "Date", "Scheduled", "Clocked", "In Δ", "Out Δ",
-                 "Sched h", "Actual h", "Status")
-        widths = (170, 95, 130, 130, 60, 60, 65, 65, 160)
+                 "Sched h", "Actual h", "Status", "Mower check-in")
+        widths = (150, 90, 125, 135, 55, 55, 60, 60, 140, 240)
         self.tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=8)
         for c, h, w in zip(cols, heads, widths):
             self.tree.heading(c, text=h)
-            self.tree.column(c, width=w, anchor="w" if c in ("emp", "status") else "center")
+            self.tree.column(c, width=w, anchor="w" if c in ("emp", "status", "mower") else "center")
         self.tree.tag_configure("flag", foreground=RED)
         self.tree.tag_configure("warn", foreground=ORANGE)
         ts = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
@@ -164,10 +178,14 @@ class App(tk.Tk):
         self.tree.pack(fill="both", expand=True)
         paned.add(tree_frame, weight=2)
 
-        foot = ttk.Frame(self, padding=(8, 3))
-        foot.pack(fill="x")
-        ttk.Label(foot, textvariable=self.status).pack(side="left")
-        ttk.Label(foot, textvariable=self.totals, font=("Segoe UI", 9, "bold")).pack(side="right")
+        self.mtab = MowersTab(self.nb, self)
+        self.nb.add(self.mtab, text="  Mowers & Oil  ")
+        self.mtab.refresh()  # sets the tab's "(n due)" label now that the tab exists
+
+    def on_mowers_changed(self, n_due: int):
+        if not hasattr(self, "mtab"):
+            return
+        self.nb.tab(self.mtab, text=f"  Mowers & Oil  ({n_due} due)  " if n_due else "  Mowers & Oil  ")
 
     # ---------------- helpers ----------------
     def _week_of(self, d: date) -> date:
@@ -243,7 +261,8 @@ class App(tk.Tk):
             w = csv.writer(f)
             w.writerow(["Employee ID", "Employee", "Date", "Sched Start", "Sched End",
                         "Clock In", "Clock Out", "In Delta (min)", "Out Delta (min)",
-                        "Early In Flag", "Late Out Flag", "Sched Hours", "Actual Hours", "Status"])
+                        "Early In Flag", "Late Out Flag", "Sched Hours", "Actual Hours", "Status",
+                        "Assigned Mower", "Mower Check-in"])
             for r in self.results:
                 w.writerow([r.employee_id, names.get(r.employee_id, r.employee_id),
                             r.day.isoformat(),
@@ -254,7 +273,8 @@ class App(tk.Tk):
                             r.in_delta_min if r.in_delta_min is not None else "",
                             r.out_delta_min if r.out_delta_min is not None else "",
                             "Y" if r.early_in else "", "Y" if r.late_out else "",
-                            f"{r.sched_hours:.2f}", f"{r.actual_hours:.2f}", r.status])
+                            f"{r.sched_hours:.2f}", f"{r.actual_hours:.2f}", r.status,
+                            (r.shift.mower or "") if r.shift else "", self._mower_text(r)])
         self.status.set(f"Exported {len(self.results)} rows to {path}")
 
     # ---------------- data ----------------
@@ -273,6 +293,7 @@ class App(tk.Tk):
         res = compare(shifts, punches, thr)
         end = self.week_start + timedelta(days=7)
         self.results = [r for r in res if self.week_start <= r.day < end]
+        self._checkins = week_checkin_lookup(self.mtab.m.checkins_between(self.week_start, end))
         self.db.save_comparisons(self.week_start, self.results, emp)
         self._fill_tree()
         self.draw()
@@ -288,15 +309,30 @@ class App(tk.Tk):
                 act += f"  ({len(r.punches)} punches)"
             tag = "flag" if (r.early_in or r.late_out) else (
                 "warn" if r.status not in ("OK",) else "")
+            mower = self._mower_text(r)
+            if mower.endswith("no check-in") and not tag:
+                tag = "warn"
             flags += r.early_in + r.late_out
             sh += r.sched_hours
             ah += r.actual_hours
             self.tree.insert("", "end", tags=(tag,), values=(
                 self.names.get(r.employee_id, r.employee_id), f"{r.day:%a %m/%d}", sched, act,
                 fmt_delta(r.in_delta_min), fmt_delta(r.out_delta_min),
-                f"{r.sched_hours:.2f}" if r.shift else "", f"{r.actual_hours:.2f}", r.status))
+                f"{r.sched_hours:.2f}" if r.shift else "", f"{r.actual_hours:.2f}", r.status,
+                mower))
         self.totals.set(f"Week: scheduled {sh:.2f} h · clocked {ah:.2f} h · "
                         f"diff {ah - sh:+.2f} h · {flags} red flag(s)")
+
+    def _mower_text(self, r: Result) -> str:
+        cks = (self._checkins.get((r.employee_id, r.day))
+               or self._checkins.get((self.names.get(r.employee_id, ""), r.day)) or [])
+        assigned = r.shift.mower if r.shift else None
+        if cks:
+            txt = "; ".join(f"{c['mower']} · {c['hours']:,.1f} h · {fmt_t(c['at'])}" for c in cks)
+            if assigned and not any(c["mower"].lower() == assigned.lower() for c in cks):
+                txt += f"  (scheduled {assigned})"
+            return txt
+        return f"{assigned} — no check-in" if assigned else ""
 
     # ---------------- drawing ----------------
     @staticmethod
